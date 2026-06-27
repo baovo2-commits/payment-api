@@ -1,5 +1,4 @@
 import express from 'express';
-import puppeteer from 'puppeteer-core';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -7,7 +6,6 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 app.get('/api/payment/check', async (req, res) => {
-  let browser;
   try {
     const { sessionId } = req.query;
 
@@ -18,82 +16,36 @@ app.get('/api/payment/check', async (req, res) => {
       });
     }
 
-    const paymentUrl = `https://thanhtoan.ndc.gov.vn/payment?sessionId=${encodeURIComponent(sessionId)}`;
-
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
-      || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--disable-images',
-        '--no-first-run'
-      ]
+    const response = await fetch('https://thanhtoan.ndc.gov.vn/api/payment/payByQRCode', {
+      method: 'POST',
+      headers: {
+        'Accept': '*/*',
+        'Content-Type': 'application/json',
+        'Origin': 'https://thanhtoan.ndc.gov.vn',
+        'Referer': `https://thanhtoan.ndc.gov.vn/payment?sessionId=${sessionId}`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
+      },
+      body: JSON.stringify({
+        sessionId,
+        MaDichVu: 'PAYMENT_GATEWAY_VIETQR',
+        MaDVThanhToan: 'MOMO'
+      })
     });
 
-    const page = await browser.newPage();
+    const data = await response.json();
 
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const type = req.resourceType();
-      if (['image', 'stylesheet', 'font', 'media'].includes(type)) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
-
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
-    );
-
-    await page.goto(paymentUrl, { waitUntil: 'networkidle0', timeout: 60000 });
-
-    const cookies = await page.cookies();
-    const cookieString = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-
-    const paymentData = {
-      sessionId: sessionId,
-      MaDichVu: 'PAYMENT_GATEWAY_VIETQR',
-      MaDVThanhToan: 'MOMO'
-    };
-
-    const apiResponse = await page.evaluate(async (data) => {
-      const resp = await fetch('https://thanhtoan.ndc.gov.vn/api/payment/payByQRCode', {
-        method: 'POST',
-        headers: {
-          'Accept': '*/*',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-        credentials: 'include'
-      });
-      const status = resp.status;
-      const body = await resp.json().catch(() => null);
-      return { status, body };
-    }, paymentData);
-
-    await browser.close();
-    browser = null;
-
-    if (apiResponse.status === 200 && apiResponse.body) {
+    if (response.ok && data.success !== false) {
       return res.json({
         code: 'success',
         message: 'thành công',
-        data: apiResponse.body
+        data
       });
     }
 
     return res.json({
       code: 'fail',
       message: 'thất bại',
-      data: apiResponse.body
+      data
     });
 
   } catch (error) {
@@ -103,10 +55,6 @@ app.get('/api/payment/check', async (req, res) => {
       message: 'thất bại',
       error: error.message
     });
-  } finally {
-    if (browser) {
-      await browser.close().catch(() => {});
-    }
   }
 });
 
@@ -116,5 +64,4 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server đang chạy tại http://localhost:${PORT}`);
-  console.log(`Sử dụng: http://localhost:${PORT}/api/payment/check?sessionId=YOUR_SESSION_ID`);
 });
