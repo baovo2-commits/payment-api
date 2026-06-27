@@ -26,16 +26,34 @@ app.get('/api/payment/check', async (req, res) => {
     browser = await puppeteer.launch({
       headless: true,
       executablePath,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-extensions',
+        '--disable-images',
+        '--no-first-run'
+      ]
     });
 
     const page = await browser.newPage();
+
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const type = req.resourceType();
+      if (['image', 'stylesheet', 'font', 'media'].includes(type)) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
 
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
     );
 
-    await page.goto(paymentUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+    await page.goto(paymentUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
     const cookies = await page.cookies();
     const cookieString = cookies.map(c => `${c.name}=${c.value}`).join('; ');
