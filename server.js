@@ -53,7 +53,7 @@ app.get('/api/payment/check', async (req, res) => {
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36'
     );
 
-    await page.goto(paymentUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.goto(paymentUrl, { waitUntil: 'networkidle0', timeout: 60000 });
 
     const cookies = await page.cookies();
     const cookieString = cookies.map(c => `${c.name}=${c.value}`).join('; ');
